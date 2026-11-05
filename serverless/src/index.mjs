@@ -299,12 +299,32 @@ async function webhook(request, env) {
   const statements = [];
   if (next && id(checkoutId)) {
     const row = await env.DB.prepare(
-      "SELECT order_id FROM orders WHERE checkout_id=?",
+      "SELECT order_id,request_json FROM orders WHERE checkout_id=?",
     )
       .bind(checkoutId)
       .first();
     // A webhook can race the checkout response. Ask Bachs to retry, never lose it.
     if (!row) fail(503, "checkout_mapping_not_ready");
+    if (next === "paid") {
+      let pricing;
+      try {
+        pricing = JSON.parse(row.request_json).pricing;
+      } catch {
+        fail(503, "stored_checkout_needs_reconciliation");
+      }
+      // The original Bachs request stores the expected charge amount/currency.
+      // Mismatches, including FX-currency payments, require reconciliation.
+      // Never infer payment from a signed event for a different amount/order.
+      if (
+        !object(pricing) ||
+        typeof pricing.amount !== "string" ||
+        typeof pricing.currency !== "string" ||
+        event.data.reference !== row.order_id ||
+        event.data.amount !== pricing.amount ||
+        event.data.currency !== pricing.currency
+      )
+        fail(503, "payment_needs_reconciliation");
+    }
     statements.push(
       env.DB.prepare(
         "UPDATE orders SET status=? WHERE checkout_id=? AND status != 'paid' AND NOT EXISTS (SELECT 1 FROM events WHERE event_id=?)",

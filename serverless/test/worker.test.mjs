@@ -107,7 +107,13 @@ async function webhook(event, offset = 0, tamper = false) {
     created_at: new Date().toISOString(),
     organization_id: "acct_test",
     type: "collection.succeeded",
-    data: { checkout_id: "chk_1", status: "SUCCEEDED" },
+    data: {
+      checkout_id: "chk_1",
+      status: "SUCCEEDED",
+      amount: "25.00",
+      currency: "USD",
+      reference: "order-1",
+    },
     ...event,
   });
   const t = Math.floor(Date.now() / 1000) + offset;
@@ -215,6 +221,37 @@ test("unknown write outcomes never create again automatically", async () => {
   assert.equal((await request()).status, 409);
   assert.equal(db.prepare("SELECT phase FROM orders").get().phase, "creating");
 });
+test("paid status requires exact server-owned charge and order details", async () => {
+  await request();
+  const valid = {
+    checkout_id: "chk_1",
+    status: "SUCCEEDED",
+    amount: "25.00",
+    currency: "USD",
+    reference: "order-1",
+  };
+  for (const [eventId, override] of [
+    ["evt_wrong_amount", { amount: "24.99" }],
+    ["evt_wrong_currency", { currency: "NGN" }],
+    ["evt_wrong_reference", { reference: "other-order" }],
+    ["evt_no_reference", { reference: null }],
+    ["evt_no_amount", { amount: null }],
+  ]) {
+    const response = await webhook({
+      id: eventId,
+      data: { ...valid, ...override },
+    });
+    assert.equal(response.status, 503, eventId);
+    assert.equal(
+      db.prepare("SELECT status FROM orders").get().status,
+      "pending",
+    );
+  }
+  assert.equal(db.prepare("SELECT COUNT(*) n FROM events").get().n, 0);
+  assert.equal((await webhook({ id: "evt_valid" })).status, 200);
+  assert.equal(db.prepare("SELECT status FROM orders").get().status, "paid");
+});
+
 test("verified webhook deduplicates and paid never regresses", async () => {
   await request();
   assert.equal((await webhook({})).status, 200);
