@@ -1,0 +1,5 @@
+{
+  "starter": {"currency": "NGN", "amount": "1000.00"},
+  "business": {"currency": "NGN", "amount": "5000.00"},
+  "global": {"currency": "USD", "amount": "10.00"}
+}

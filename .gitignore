@@ -1,0 +1,16 @@
+.dart_tool/
+.packages
+.pub/
+build/
+coverage/
+.flutter-plugins
+.flutter-plugins-dependencies
+**/.idea/
+**/*.iml
+**/.DS_Store
+.env
+.env.*
+!.env.example
+**/ios/Flutter/Generated.xcconfig
+**/android/local.properties
+server/config/catalog.json

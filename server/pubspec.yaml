@@ -1,0 +1,12 @@
+name: bachs_server
+description: Unofficial server-only Dart companion for Bachs checkout and webhooks.
+version: 0.2.0
+publish_to: none
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+dependencies:
+  http: ^1.2.0
+  crypto: ^3.0.3
+dev_dependencies:
+  test: ^1.25.0
+  lints: ^3.0.0
