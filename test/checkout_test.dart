@@ -29,6 +29,8 @@ void main() {
     final sdk = BachsCheckout(launcher: (_) async => true);
     for (final url in [
       'http://checkout.bachs.io/c/abc',
+      'https://checkout.bachs.io:8443/c/abc',
+      'https://checkout.bachs.io/c/sk_live_fixture',
       'https://checkout.bachs.io.attacker.example/c/abc',
       'https://bachs.io@attacker.example/c/abc',
     ]) {
@@ -38,12 +40,16 @@ void main() {
 
   test('honors opt-in custom checkout host', () {
     final sdk = BachsCheckout(allowedHosts: {'payments.example.com'});
-    expect(sdk.isAllowedCheckoutUrl(Uri.parse('https://payments.example.com/c/abc')), isTrue);
+    expect(
+        sdk.isAllowedCheckoutUrl(
+            Uri.parse('https://payments.example.com/c/abc')),
+        isTrue);
   });
 
   test('launcher returning false throws an explicit exception', () async {
     final sdk = BachsCheckout(launcher: (_) async => false);
-    await expectLater(sdk.launch(session), throwsA(isA<BachsCheckoutException>()));
+    await expectLater(
+        sdk.launch(session), throwsA(isA<BachsCheckoutException>()));
   });
 
   test('expired checkout is not launched', () async {
@@ -53,7 +59,8 @@ void main() {
       status: 'open',
       expiresAt: DateTime.utc(2020),
     );
-    await expectLater(BachsCheckout(launcher: (_) async => true).launch(expired),
+    await expectLater(
+        BachsCheckout(launcher: (_) async => true).launch(expired),
         throwsA(isA<BachsCheckoutException>()));
   });
 
@@ -62,7 +69,8 @@ void main() {
       successUrl: Uri.parse('https://example.com/pay/success'),
       cancelUrl: Uri.parse('https://example.com/pay/cancel'),
     );
-    final success = Uri.parse('https://example.com/pay/success?checkout_id=chk_1');
+    final success =
+        Uri.parse('https://example.com/pay/success?checkout_id=chk_1');
     expect(matcher.classify(success), BachsReturnKind.successRedirect);
     expect(matcher.checkoutIdFrom(success), 'chk_1');
     expect(matcher.classify(Uri.parse('https://example.com/pay/success-fake')),

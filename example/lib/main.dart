@@ -1,154 +1,361 @@
+import 'dart:async';
+
+import 'package:app_links/app_links.dart';
 import 'package:bachs_flutter/bachs_flutter.dart';
 import 'package:flutter/material.dart';
 
-/// Demo has NO secret keys. Configure only the URL of YOUR OWN backend.
-const backendUrl = String.fromEnvironment(
-  'BACHS_MERCHANT_BACKEND', defaultValue: 'http://127.0.0.1:8080');
+const checkoutEndpoint = String.fromEnvironment('BACHS_CHECKOUT_ENDPOINT');
+const hostedCheckoutUrl = String.fromEnvironment('BACHS_HOSTED_CHECKOUT_URL');
+const returnBase = String.fromEnvironment(
+  'BACHS_RETURN_BASE',
+  defaultValue: 'https://shop.example.com/pay',
+);
 
-void main() => runApp(const MerchantExampleApp());
+void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  final links = AppLinks();
+  runApp(MerchantExampleApp(links: links.uriLinkStream));
+}
+
+/// Offline providers exercise the same SDK without moving money or opening URLs.
+class SimulatedMerchant {
+  BachsPaymentState state = BachsPaymentState.pending;
+  bool unavailable = false;
+
+  BachsFlutter createSdk() => BachsFlutter(
+    createSession: (request) async => BachsCheckoutSession(
+      id: 'simulated-${request.orderId}',
+      checkoutUrl: Uri.parse('https://checkout.bachs.io/simulated'),
+      status: 'open',
+    ),
+    verifyStatus: (orderId, checkoutId) async {
+      if (unavailable) throw const BachsSdkException('Simulated outage');
+      return BachsPaymentStatus(
+        orderId: orderId,
+        checkoutId: checkoutId,
+        state: state,
+      );
+    },
+    checkout: BachsCheckout(launcher: (_) async => true),
+  );
+}
 
 class MerchantExampleApp extends StatelessWidget {
-  const MerchantExampleApp({super.key});
+  const MerchantExampleApp({super.key, this.links});
+  final Stream<Uri>? links;
   @override
   Widget build(BuildContext context) => MaterialApp(
-        title: 'Bachs Flutter: Developer Integration',
-        theme: ThemeData(useMaterial3: true, colorSchemeSeed: Colors.indigo),
-        home: const MerchantExamplePage(),
-      );
+    title: 'Little Goods · Bachs Sandbox',
+    theme: ThemeData(
+      useMaterial3: true,
+      colorSchemeSeed: const Color(0xff145c49),
+    ),
+    home: ShopPage(links: links),
+  );
 }
 
-class MerchantExamplePage extends StatefulWidget {
-  const MerchantExamplePage({super.key});
+class ShopPage extends StatefulWidget {
+  const ShopPage({super.key, this.links});
+  final Stream<Uri>? links;
   @override
-  State<MerchantExamplePage> createState() => _MerchantExamplePageState();
+  State<ShopPage> createState() => _ShopPageState();
 }
 
-class _MerchantExamplePageState extends State<MerchantExamplePage> {
-  late final BachsBackendAdapter backend;
-  late final BachsFlutter bachs;
-  final catalog = const {
-    'starter': 'Starter · NGN 1,000',
-    'business': 'Business · NGN 5,000',
-    'global': 'Global · USD 10',
-  };
-  String sku = 'starter';
-  String message = 'Select a merchant product to start checkout.';
+class _ShopPageState extends State<ShopPage> with WidgetsBindingObserver {
+  final simulator = SimulatedMerchant();
+  final token = TextEditingController();
+  final order = TextEditingController();
+  late final BachsFlutter sdk;
+  StreamSubscription<Uri>? subscription;
+  BachsPaymentResult? payment;
   bool busy = false;
-  String? orderId;
-  BachsCheckoutSession? session;
+  String product = 'notebook';
+  int quantity = 1;
+  String message = 'Choose something lovely for your desk.';
+  bool get simulated => checkoutEndpoint.isEmpty;
+  bool get locked => busy || payment != null;
+  static const products = {
+    'notebook': ('Linen notebook', 2500),
+    'mug': ('Studio mug', 4500),
+    'tote': ('Everyday tote', 6000),
+  };
 
   @override
   void initState() {
     super.initState();
-    backend = BachsBackendAdapter(
-      baseUrl: Uri.parse(backendUrl),
-      // Opt-in ONLY for loopback simulator/emulator development.
-      allowInsecureLoopback: true,
-      // Production: tokenProvider: () async => auth.currentAccessToken,
-    );
-    bachs = BachsFlutter(
-      createSession: backend.createSession,
-      verifyStatus: backend.checkStatus,
-      returnUrlMatcher: BachsReturnUrlMatcher(
-        successUrl: Uri.parse('https://your-domain.example/pay/success'),
-        cancelUrl: Uri.parse('https://your-domain.example/pay/cancel'),
-      ),
+    WidgetsBinding.instance.addObserver(this);
+    sdk = simulated
+        ? simulator.createSdk()
+        : BachsFlutter(
+            config: BachsConfig(
+              checkoutEndpoint: checkoutEndpoint,
+              tokenProvider: () async =>
+                  token.text.trim().isEmpty ? null : token.text.trim(),
+            ),
+            returnUrlMatcher: BachsReturnUrlMatcher(
+              successUrl: Uri.parse('$returnBase/success'),
+              cancelUrl: Uri.parse('$returnBase/cancel'),
+            ),
+          );
+    subscription = widget.links?.listen(
+      _onReturn,
+      onError: (_) {
+        if (mounted)
+          setState(
+            () => message = 'Could not read return link. Tap Check status.',
+          );
+      },
     );
   }
 
   @override
-  void dispose() {
-    backend.close();
-    super.dispose();
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && payment != null && !busy)
+      _verify();
   }
 
-  Future<void> _start() async {
+  Future<void> _onReturn(Uri uri) async {
+    if (simulated) return;
+    if (payment == null) {
+      setState(
+        () => message =
+            'No active checkout on this device. Restore your order from your merchant account before checking payment.',
+      );
+      return;
+    }
     if (busy) return;
-    setState(() { busy = true; message = 'Creating checkout on merchant server…'; });
+    await _run(() async {
+      payment = await sdk.verifyReturn(uri, payment!);
+      _showStatus();
+    });
+  }
+
+  Future<void> _run(Future<void> Function() action) async {
+    if (busy) return;
+    setState(() => busy = true);
     try {
-      final newOrderId = 'demo_${DateTime.now().microsecondsSinceEpoch}';
-      final created = await bachs.startCheckout(BachsCheckoutRequest(
-        orderId: newOrderId,
-        context: {'sku': sku},
-      ));
-      if (!mounted) return;
-      setState(() {
-        orderId = newOrderId;
-        session = created;
-        message = 'Checkout opened. Payment is unverified until the backend confirms it.';
-      });
-    } catch (error) {
-      if (mounted) setState(() => message = 'Checkout failed: $error');
+      await action();
+    } catch (_) {
+      message =
+          'We could not complete that request. Check your connection and try again. Your payment is not confirmed.';
     } finally {
       if (mounted) setState(() => busy = false);
     }
   }
 
-  Future<void> _check() async {
-    final id = orderId;
-    final active = session;
-    if (busy || id == null || active == null) return;
-    setState(() { busy = true; message = 'Checking verified merchant order status…'; });
-    try {
-      final result = await bachs.checkPayment(orderId: id, checkoutId: active.id);
-      if (!mounted) return;
-      setState(() => message = switch (result.state) {
-        BachsPaymentState.paid => 'Payment confirmed by your merchant backend.',
-        BachsPaymentState.pending => 'Still pending. Await a verified Bachs webhook.',
-        BachsPaymentState.failed => 'Payment failed.',
-        BachsPaymentState.cancelled => 'Payment cancelled.',
-        BachsPaymentState.expired => 'Checkout expired.',
-      });
-    } catch (error) {
-      if (mounted) setState(() => message = 'Could not check status: $error');
-    } finally {
-      if (mounted) setState(() => busy = false);
+  Future<void> _pay() => _run(() async {
+    if (!simulated &&
+        (token.text.trim().isEmpty || order.text.trim().isEmpty)) {
+      message =
+          'Enter a merchant order ID and your short-lived user login token.';
+      return;
     }
+    simulator.state = BachsPaymentState.pending;
+    payment = await sdk.pay(
+      BachsPaymentRequest(
+        orderId: simulated
+            ? 'demo-${DateTime.now().microsecondsSinceEpoch}'
+            : order.text.trim(),
+        productId: product,
+        quantity: quantity,
+      ),
+    );
+    message = simulated
+        ? 'SIMULATED: pending. No money moved.'
+        : 'Checkout opened. Payment is not confirmed. Return here to check status.';
+    if (payment!.status != null) _showStatus();
+  });
+
+  void _showStatus() {
+    final state = payment?.status?.state;
+    if (simulated) {
+      message = 'SIMULATED: ${state?.name ?? 'pending'}. No money moved.';
+    } else {
+      message = switch (state) {
+        BachsPaymentState.paid => 'Payment confirmed by your merchant backend.',
+        BachsPaymentState.cancelled =>
+          'Checkout cancelled. No confirmed payment.',
+        BachsPaymentState.failed =>
+          'Payment failed. Contact the merchant if you were charged.',
+        BachsPaymentState.expired => 'Checkout expired. Start a new order.',
+        _ =>
+          'Payment pending. Check again after the merchant receives confirmation.',
+      };
+    }
+  }
+
+  Future<void> _verify() => _run(() async {
+    if (payment == null) return;
+    payment = await sdk.verifyPayment(payment!);
+    _showStatus();
+  });
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    subscription?.cancel();
+    sdk.close();
+    token.dispose();
+    order.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('Bachs Flutter SDK')),
-        body: SafeArea(child: Center(child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 480),
-          child: ListView(shrinkWrap: true, padding: const EdgeInsets.all(24),
-            children: [
-              const Icon(Icons.account_balance_wallet_outlined, size: 60),
-              const SizedBox(height: 16),
-              Text('Merchant integration example',
-                style: Theme.of(context).textTheme.headlineSmall,
-                textAlign: TextAlign.center),
-              const SizedBox(height: 12),
-              const Text('Each developer owns their backend, Bachs keys, products and webhooks. The mobile SDK only launches sessions and reads merchant-verified status.',
-                textAlign: TextAlign.center),
-              const SizedBox(height: 24),
-              const Text('Choose a product'),
-              const SizedBox(height: 8),
-              Wrap(spacing: 8, runSpacing: 4,
-                children: [for (final item in catalog.entries)
-                  ChoiceChip(label: Text(item.value),
-                    selected: sku == item.key,
-                    onSelected: busy ? null : (_) => setState(() => sku = item.key),
+    appBar: AppBar(title: const Text('Little Goods')),
+    body: Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 560),
+        child: ListView(
+          padding: const EdgeInsets.all(24),
+          children: [
+            Text(
+              simulated
+                  ? 'SIMULATED DEMO · NO REAL PAYMENTS'
+                  : 'LIVE SANDBOX · TEST PAYMENTS ONLY',
+              style: Theme.of(context).textTheme.labelLarge,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Good things for everyday.',
+              style: Theme.of(context).textTheme.headlineMedium,
+            ),
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 8,
+              children: [
+                for (final item in products.entries)
+                  ChoiceChip(
+                    label: Text('${item.value.$1} · ₦${item.value.$2}'),
+                    selected: product == item.key,
+                    onSelected: locked
+                        ? null
+                        : (_) => setState(() => product = item.key),
                   ),
-                ],
+              ],
+            ),
+            Row(
+              children: [
+                const Text('Quantity'),
+                IconButton(
+                  onPressed: locked || quantity == 1
+                      ? null
+                      : () => setState(() => quantity--),
+                  icon: const Icon(Icons.remove),
+                ),
+                Text('$quantity'),
+                IconButton(
+                  onPressed: locked || quantity == 5
+                      ? null
+                      : () => setState(() => quantity++),
+                  icon: const Icon(Icons.add),
+                ),
+                const Spacer(),
+                Text('₦${products[product]!.$2 * quantity}'),
+              ],
+            ),
+            const Text(
+              'Prices shown are illustrative. The merchant server validates the order and owns the final price.',
+            ),
+            if (!simulated) ...[
+              TextField(
+                controller: order,
+                enabled: !locked,
+                decoration: const InputDecoration(
+                  labelText: 'Merchant-created sandbox order ID',
+                ),
               ),
-              const SizedBox(height: 16),
-              FilledButton.icon(onPressed: busy ? null : _start,
-                icon: const Icon(Icons.open_in_browser),
-                label: const Text('Pay with Bachs')),
-              const SizedBox(height: 8),
-              OutlinedButton.icon(onPressed: busy || session == null ? null : _check,
-                icon: const Icon(Icons.verified_outlined),
-                label: const Text('Check verified payment status')),
-              const SizedBox(height: 16),
-              Text(message, textAlign: TextAlign.center),
-              const SizedBox(height: 16),
-              if (busy) const Center(child: CircularProgressIndicator()),
-              const SizedBox(height: 20),
-              const Text('Sandbox example only. Do not use the local reference backend for real payments.',
-                textAlign: TextAlign.center),
+              TextField(
+                controller: token,
+                enabled: !busy,
+                obscureText: true,
+                autocorrect: false,
+                enableSuggestions: false,
+                decoration: const InputDecoration(
+                  labelText: 'Short-lived user login token (memory only)',
+                ),
+              ),
             ],
-          ),
-        ))),
-      );
+            const SizedBox(height: 16),
+            FilledButton(
+              onPressed: locked ? null : _pay,
+              child: const Text('Pay with Bachs'),
+            ),
+            if (payment != null) ...[
+              OutlinedButton(
+                onPressed: busy ? null : _verify,
+                child: const Text('Check status'),
+              ),
+              if (simulated)
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    for (final state in [
+                      BachsPaymentState.pending,
+                      BachsPaymentState.paid,
+                      BachsPaymentState.cancelled,
+                      BachsPaymentState.failed,
+                      BachsPaymentState.expired,
+                    ])
+                      TextButton(
+                        onPressed: busy
+                            ? null
+                            : () {
+                                simulator.state = state;
+                                simulator.unavailable = false;
+                                _verify();
+                              },
+                        child: Text('Simulate ${state.name}'),
+                      ),
+                    TextButton(
+                      onPressed: busy
+                          ? null
+                          : () {
+                              simulator.unavailable = true;
+                              _verify();
+                            },
+                      child: const Text('Simulate network error'),
+                    ),
+                    TextButton(
+                      onPressed: busy
+                          ? null
+                          : () {
+                              simulator.unavailable = false;
+                              _verify();
+                            },
+                      child: const Text('Restore connection'),
+                    ),
+                  ],
+                ),
+              if (payment!.status != null &&
+                  payment!.status!.state != BachsPaymentState.pending)
+                TextButton(
+                  onPressed: busy
+                      ? null
+                      : () => setState(() {
+                          payment = null;
+                          message = 'Choose your next item.';
+                        }),
+                  child: const Text('Shop again'),
+                ),
+            ],
+            if (!simulated && hostedCheckoutUrl.isNotEmpty)
+              TextButton(
+                onPressed: busy
+                    ? null
+                    : () => _run(() async {
+                        await sdk.openCheckoutUrl(Uri.parse(hostedCheckoutUrl));
+                        message =
+                            'Hosted checkout opened. This URL-only launch cannot confirm payment; check the order with your merchant.';
+                      }),
+                child: const Text('Open existing sandbox checkout URL'),
+              ),
+            const SizedBox(height: 12),
+            Semantics(liveRegion: true, child: Text(message)),
+            if (busy) const LinearProgressIndicator(),
+          ],
+        ),
+      ),
+    ),
+  );
 }

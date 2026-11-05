@@ -33,7 +33,9 @@ class BachsWebhooks {
     Duration tolerance = const Duration(minutes: 5),
     DateTime? now,
   }) {
-    if (secret.isEmpty) throw const BachsWebhookException('Missing signing secret');
+    if (secret.isEmpty) {
+      throw const BachsWebhookException('Missing signing secret');
+    }
     final lowercase = <String, String>{
       for (final entry in headers.entries) entry.key.toLowerCase(): entry.value,
     };
@@ -47,26 +49,31 @@ class BachsWebhooks {
         throw const BachsWebhookException('Invalid signature timestamp');
       }
       timestamp = tValues.single.substring(2);
-      signatures = parts.where((e) => e.startsWith('v1='))
-          .map((e) => e.substring(3)).toList();
+      signatures = parts
+          .where((e) => e.startsWith('v1='))
+          .map((e) => e.substring(3))
+          .toList();
     } else {
       timestamp = lowercase['x-bachs-timestamp'];
-      signatures = [if (lowercase['x-bachs-signature'] != null)
-        lowercase['x-bachs-signature']!];
+      signatures = [
+        if (lowercase['x-bachs-signature'] != null)
+          lowercase['x-bachs-signature']!
+      ];
     }
     final ts = int.tryParse(timestamp ?? '');
-    if (ts == null || ts < 0 || signatures.isEmpty ||
-        tolerance.isNegative) {
+    if (ts == null || ts < 0 || signatures.isEmpty || tolerance.isNegative) {
       throw const BachsWebhookException('Missing or invalid webhook signature');
     }
-    final currentSeconds = (now ?? DateTime.now()).toUtc().millisecondsSinceEpoch ~/ 1000;
+    final currentSeconds =
+        (now ?? DateTime.now()).toUtc().millisecondsSinceEpoch ~/ 1000;
     if ((currentSeconds - ts).abs() > tolerance.inSeconds) {
       throw const BachsWebhookException('Webhook timestamp outside tolerance');
     }
     final bytes = [...utf8.encode('$ts.'), ...rawBody];
     final digest = Hmac(sha256, utf8.encode(secret)).convert(bytes).bytes;
     if (!signatures.any((signature) => _constantTimeEqual(digest, signature))) {
-      throw const BachsWebhookException('Webhook signature verification failed');
+      throw const BachsWebhookException(
+          'Webhook signature verification failed');
     }
     dynamic decoded;
     try {
@@ -75,7 +82,8 @@ class BachsWebhooks {
       throw const BachsWebhookException('Malformed webhook JSON');
     }
     if (decoded is! Map<String, dynamic> ||
-        decoded['id'] is! String || (decoded['id'] as String).isEmpty ||
+        decoded['id'] is! String ||
+        (decoded['id'] as String).isEmpty ||
         decoded['type'] is! String ||
         decoded['data'] is! Map<String, dynamic>) {
       throw const BachsWebhookException('Invalid webhook event envelope');

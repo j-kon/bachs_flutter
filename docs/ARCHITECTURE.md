@@ -20,6 +20,8 @@ Merchant Flutter app                Merchant-authenticated backend             B
 
 ## Public package
 
+The simplest entry points are `BachsFlutter.hosted()` for an existing URL and `BachsFlutter(config: BachsConfig(...))` for dynamic checkout. `pay` launches and requests current status; `verifyPayment` and `verifyReturn` refresh it without recreating checkout. A `BachsPaymentResult` keeps the session even when status verification fails.
+
 - `BachsCheckoutRequest` carries the developer's order ID and an arbitrary **untrusted** context map.
 - `BachsFlutter` composes a `BachsSessionProvider`, optional `BachsStatusProvider`, `BachsCheckout` URL launcher, and optional `BachsReturnUrlMatcher`.
 - `BachsBackendAdapter` is optional: base URL, configurable paths, optional short-lived user token provider, injected HTTP client, timeout and opt-in loopback HTTP.
@@ -34,10 +36,14 @@ Merchant Flutter app                Merchant-authenticated backend             B
 - `BachsWebhooks.constructEvent` validates raw-byte signatures and timestamps, including V2 multiple rotation signatures.
 - The local reference server demonstrates an optional adapter contract. Real merchants can instead use the official Node/TypeScript Bachs SDK or any other backend.
 
-## Non-goals in v0.2.0
+## Scope and limitations
 
 - PCI card data collection or embedded native card fields.
 - Automatically installing OS deep-link association for an unrelated merchant.
 - Arbitrary payouts/refunds from Flutter devices using privileged keys.
-- Automatic order fulfillment, durable event processing or consumer-facing transaction history.
+- Automatic order fulfillment or consumer-facing transaction history. The optional Worker persists and deduplicates events, but fulfillment jobs remain merchant-owned.
 - Hardcoding one merchant's API credentials/product IDs into the SDK.
+
+## Optional serverless deployment
+
+The [Cloudflare Worker](SERVERLESS.md) implements authenticated checkout and status routes, fixed server pricing, D1 order reservations, immutable carts, durable webhook deduplication and transactionally recorded payment state. It defaults to sandbox. It is a starter for a single merchant deployment, not a shared secrets service.

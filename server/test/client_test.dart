@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:bachs_server/bachs_server.dart';
@@ -8,17 +9,21 @@ import 'package:test/test.dart';
 void main() {
   test('environment-key mismatch rejected', () {
     expect(() => BachsClient(apiKey: 'sk_live_dummy'), throwsArgumentError);
-    expect(() => BachsClient(
-      apiKey: 'sk_sandbox_dummy', environment: BachsEnvironment.production),
-      throwsArgumentError);
+    expect(
+        () => BachsClient(
+            apiKey: 'sk_sandbox_dummy',
+            environment: BachsEnvironment.production),
+        throwsArgumentError);
   });
 
   test('raw pricing and product cart are exclusive', () {
     expect(() => CreateCheckoutRequest(), throwsArgumentError);
-    expect(() => CreateCheckoutRequest(
-      pricing: const BachsPricing(currency: 'USD', amount: '10.00'),
-      productCart: const [BachsLineItem(productId: 'prod_test')],
-    ), throwsArgumentError);
+    expect(
+        () => CreateCheckoutRequest(
+              pricing: const BachsPricing(currency: 'USD', amount: '10.00'),
+              productCart: const [BachsLineItem(productId: 'prod_test')],
+            ),
+        throwsArgumentError);
     final request = CreateCheckoutRequest(
       pricing: const BachsPricing(currency: 'USD', amount: '10.00'),
       customer: const BachsCustomerDetails(email: 'user@example.com'),
@@ -31,13 +36,15 @@ void main() {
     late http.Request captured;
     final mock = MockClient((request) async {
       captured = request;
-      return http.Response(jsonEncode({
-        'checkout_id': 'chk_123',
-        'checkout_url': 'https://checkout.bachs.io/c/xyz',
-        'status': 'open',
-        'created_at': '2026-10-22T12:00:00Z',
-        'expires_at': '2026-10-22T13:00:00Z',
-      }), 201);
+      return http.Response(
+          jsonEncode({
+            'checkout_id': 'chk_123',
+            'checkout_url': 'https://checkout.bachs.io/c/xyz',
+            'status': 'open',
+            'created_at': '2026-10-22T12:00:00Z',
+            'expires_at': '2026-10-22T13:00:00Z',
+          }),
+          201);
     });
     final client = BachsClient(apiKey: 'sk_sandbox_test_key', httpClient: mock);
     final checkout = await client.createCheckout(
@@ -55,9 +62,11 @@ void main() {
       }
       return null;
     }
+
     expect(headerValue('Authorization'), 'Bearer sk_sandbox_test_key');
     expect(headerValue('Idempotency-Key'), 'checkout-order_123');
-    expect(jsonDecode(captured.body)['product_cart'][0]['product_id'], 'prod_test');
+    expect(jsonDecode(captured.body)['product_cart'][0]['product_id'],
+        'prod_test');
     expect(checkout.toPublicJson()['checkout_url'],
         'https://checkout.bachs.io/c/xyz');
     expect(checkout.toPublicJson().containsKey('reference'), isFalse);
@@ -65,21 +74,26 @@ void main() {
   });
 
   test('retrieval can establish completed and paid', () async {
-    final client = BachsClient(apiKey: 'sk_sandbox_test_key',
-      httpClient: MockClient((request) async => http.Response(jsonEncode({
-        'checkout_id': 'chk_paid',
-        'status': 'completed',
-        'payment_status': 'succeeded',
-      }), 200)));
+    final client = BachsClient(
+        apiKey: 'sk_sandbox_test_key',
+        httpClient: MockClient((request) async => http.Response(
+            jsonEncode({
+              'checkout_id': 'chk_paid',
+              'status': 'completed',
+              'payment_status': 'succeeded',
+            }),
+            200)));
     final result = await client.retrieveCheckout('chk_paid');
     expect(result.isCompletedAndPaid, isTrue);
   });
 
   test('http error preserves safe code and retry-after', () async {
-    final client = BachsClient(apiKey: 'sk_sandbox_test_key',
-      httpClient: MockClient((request) async => http.Response(
-        '{"error_code":"TOO_MANY_REQUESTS","detail":"Rate limit exceeded"}',
-        429, headers: {'retry-after': '12'})));
+    final client = BachsClient(
+        apiKey: 'sk_sandbox_test_key',
+        httpClient: MockClient((request) async => http.Response(
+            '{"error_code":"TOO_MANY_REQUESTS","detail":"Rate limit exceeded"}',
+            429,
+            headers: {'retry-after': '12'})));
     try {
       await client.listProducts();
       fail('Expected an API error');
@@ -89,6 +103,43 @@ void main() {
       expect(e.retryAfter, const Duration(seconds: 12));
       expect('$e'.contains('sk_sandbox_test_key'), isFalse);
     }
+  });
+
+  test('response body timeout is mapped without retrying', () async {
+    var sends = 0;
+    final body = StreamController<List<int>>();
+    final client = BachsClient(
+      apiKey: 'sk_sandbox_test_key',
+      timeout: const Duration(milliseconds: 10),
+      httpClient: MockClient.streaming((request, stream) async {
+        sends++;
+        return http.StreamedResponse(body.stream, 200);
+      }),
+    );
+    await expectLater(
+        client.listProducts(),
+        throwsA(
+            isA<BachsApiException>().having((e) => e.code, 'code', 'TIMEOUT')));
+    expect(sends, 1);
+    await body.close();
+  });
+
+  test('response body network failure is mapped without leaking credentials',
+      () async {
+    final client = BachsClient(
+      apiKey: 'sk_sandbox_test_key',
+      httpClient: MockClient.streaming((request, stream) async =>
+          http.StreamedResponse(
+              Stream<List<int>>.error(
+                  http.ClientException('sensitive transport detail')),
+              200)),
+    );
+    await expectLater(
+        client.listProducts(),
+        throwsA(isA<BachsApiException>()
+            .having((e) => e.code, 'code', 'NETWORK_ERROR')
+            .having((e) => e.toString(), 'safe message',
+                isNot(contains('sensitive transport detail')))));
   });
 
   test('timeout does not silently retry a write', () async {
@@ -103,8 +154,9 @@ void main() {
       }),
     );
     await expectLater(
-      client.createCheckout(CreateCheckoutRequest(
-          pricing: const BachsPricing(currency: 'USD', amount: '10.00')),
+      client.createCheckout(
+          CreateCheckoutRequest(
+              pricing: const BachsPricing(currency: 'USD', amount: '10.00')),
           idempotencyKey: 'same-operation'),
       throwsA(isA<BachsApiException>()),
     );

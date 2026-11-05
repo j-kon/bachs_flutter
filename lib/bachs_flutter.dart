@@ -8,3 +8,4 @@ export 'src/models.dart';
 export 'src/checkout_flow.dart';
 export 'src/backend_adapter.dart';
 export 'src/checkout_button.dart';
+export 'src/config.dart';

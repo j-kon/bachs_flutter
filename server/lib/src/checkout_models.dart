@@ -18,11 +18,12 @@ class BachsPricing {
 }
 
 class BachsLineItem {
-  const BachsLineItem({required this.productId, this.quantity = 1,
-    this.priceOverride});
+  const BachsLineItem(
+      {required this.productId, this.quantity = 1, this.priceOverride});
 
   final String productId;
   final int quantity;
+
   /// Provider-defined item price override. May be a fixed or custom price.
   /// Construct this on your trusted backend, never from mobile input.
   final Map<String, dynamic>? priceOverride;
@@ -67,8 +68,11 @@ class CreateCheckoutRequest {
     if ((productCart != null) == (pricing != null)) {
       throw ArgumentError('Provide exactly one of productCart or pricing');
     }
-    if (productCart != null && (productCart!.isEmpty || productCart!.length > 20 ||
-        productCart!.any((item) => item.productId.isEmpty || item.quantity < 1))) {
+    if (productCart != null &&
+        (productCart!.isEmpty ||
+            productCart!.length > 20 ||
+            productCart!
+                .any((item) => item.productId.isEmpty || item.quantity < 1))) {
       throw ArgumentError('productCart must contain 1-20 valid items');
     }
     if (pricing != null &&
@@ -80,7 +84,8 @@ class CreateCheckoutRequest {
       throw ArgumentError('reference must be between 1 and 128 characters');
     }
     if (customerCreation != null &&
-        customerCreation != 'if_required' && customerCreation != 'always') {
+        customerCreation != 'if_required' &&
+        customerCreation != 'always') {
       throw ArgumentError('customerCreation must be if_required or always');
     }
     if (paymentMethodTypes != null && paymentMethodTypes!.isEmpty) {
@@ -115,7 +120,8 @@ class CreateCheckoutRequest {
         if (metadata != null) 'metadata': metadata,
         if (expiresInMinutes != null) 'expires_in_minutes': expiresInMinutes,
         if (billingCurrency != null) 'billing_currency': billingCurrency,
-        if (paymentMethodTypes != null) 'payment_method_types': paymentMethodTypes,
+        if (paymentMethodTypes != null)
+          'payment_method_types': paymentMethodTypes,
         if (customerCreation != null) 'customer_creation': customerCreation,
       };
 }
@@ -142,9 +148,12 @@ class CreatedCheckout {
     final id = json['checkout_id'];
     final url = json['checkout_url'];
     final status = json['status'];
-    if (id is! String || id.isEmpty ||
-        url is! String || Uri.tryParse(url)?.hasAuthority != true ||
-        status is! String || status.isEmpty) {
+    if (id is! String ||
+        id.isEmpty ||
+        url is! String ||
+        Uri.tryParse(url)?.hasAuthority != true ||
+        status is! String ||
+        status.isEmpty) {
       throw const FormatException('Invalid Bachs checkout response');
     }
     final createdAt = json['created_at'];
@@ -153,7 +162,8 @@ class CreatedCheckout {
       id: id,
       checkoutUrl: Uri.parse(url),
       status: status,
-      reference: json['reference'] is String ? json['reference'] as String : null,
+      reference:
+          json['reference'] is String ? json['reference'] as String : null,
       createdAt: createdAt is String ? DateTime.tryParse(createdAt) : null,
       expiresAt: expiresAt is String ? DateTime.tryParse(expiresAt) : null,
     );
@@ -164,22 +174,27 @@ class CreatedCheckout {
         'checkout_id': id,
         'checkout_url': checkoutUrl.toString(),
         'status': status,
-        if (expiresAt != null) 'expires_at': expiresAt!.toUtc().toIso8601String(),
+        if (expiresAt != null)
+          'expires_at': expiresAt!.toUtc().toIso8601String(),
       };
 }
 
 /// Minimal typed view of the retrieval response; includes raw data for forward
 /// compatibility with optional Bachs fields.
 class RetrievedCheckout {
-  const RetrievedCheckout({required this.id, required this.status,
-    required this.paymentStatus, required this.data});
+  const RetrievedCheckout(
+      {required this.id,
+      required this.status,
+      required this.paymentStatus,
+      required this.data});
 
   final String id;
   final String status;
   final String? paymentStatus;
   final Map<String, dynamic> data;
 
-  bool get isCompletedAndPaid => status.toLowerCase() == 'completed' &&
+  bool get isCompletedAndPaid =>
+      status.toLowerCase() == 'completed' &&
       paymentStatus?.toLowerCase() == 'succeeded';
 
   factory RetrievedCheckout.fromJson(Map<String, dynamic> json) {
@@ -190,7 +205,8 @@ class RetrievedCheckout {
       id: json['checkout_id'] as String,
       status: json['status'] as String,
       paymentStatus: json['payment_status'] is String
-          ? json['payment_status'] as String : null,
+          ? json['payment_status'] as String
+          : null,
       data: json,
     );
   }

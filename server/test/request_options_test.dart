@@ -2,11 +2,14 @@ import 'package:bachs_server/bachs_server.dart';
 import 'package:test/test.dart';
 
 void main() {
-  test('merchant can configure catalog cart, override and payment corridors', () {
+  test('merchant can configure catalog cart, override and payment corridors',
+      () {
     final request = CreateCheckoutRequest(
       productCart: const [
-        BachsLineItem(productId: 'prod_first', quantity: 2,
-          priceOverride: {'price_type': 'fixed', 'amount': '19.00'}),
+        BachsLineItem(
+            productId: 'prod_first',
+            quantity: 2,
+            priceOverride: {'price_type': 'fixed', 'amount': '19.00'}),
         BachsLineItem(productId: 'prod_second'),
       ],
       customer: const BachsCustomerDetails(email: 'test@example.com'),
@@ -30,9 +33,11 @@ void main() {
     expect(request.toJson().containsKey('product_cart'), isFalse);
   });
   test('invalid customer creation rejected', () {
-    expect(() => CreateCheckoutRequest(
-      pricing: const BachsPricing(currency: 'USD', amount: '1.00'),
-      customerCreation: 'never',
-    ), throwsArgumentError);
+    expect(
+        () => CreateCheckoutRequest(
+              pricing: const BachsPricing(currency: 'USD', amount: '1.00'),
+              customerCreation: 'never',
+            ),
+        throwsArgumentError);
   });
 }

@@ -23,7 +23,9 @@ void main() {
         return true;
       }),
     );
-    await tester.pumpWidget(MaterialApp(home: Scaffold(body: BachsCheckoutButton(
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: BachsCheckoutButton(
       bachs: bachs,
       request: BachsCheckoutRequest(orderId: 'order_9'),
       onCheckoutLaunched: (value) {

@@ -14,3 +14,10 @@ coverage/
 **/ios/Flutter/Generated.xcconfig
 **/android/local.properties
 server/config/catalog.json
+**/pubspec_overrides.yaml
+**/node_modules/
+**/.wrangler/
+**/.dev.vars
+**/.dev.vars.*
+**/__pycache__/
+!**/.dev.vars.example

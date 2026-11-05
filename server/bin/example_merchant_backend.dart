@@ -23,14 +23,20 @@ Future<void> main() async {
   final webhookSecret = Platform.environment['BACHS_WEBHOOK_SECRET'];
   final success = Platform.environment['BACHS_SUCCESS_URL'];
   final cancel = Platform.environment['BACHS_CANCEL_URL'];
-  if (key == null || key.isEmpty || success == null || cancel == null ||
-      success.isEmpty || cancel.isEmpty) {
-    stderr.writeln('Set BACHS_API_KEY, BACHS_SUCCESS_URL and BACHS_CANCEL_URL.');
+  if (key == null ||
+      key.isEmpty ||
+      success == null ||
+      cancel == null ||
+      success.isEmpty ||
+      cancel.isEmpty) {
+    stderr
+        .writeln('Set BACHS_API_KEY, BACHS_SUCCESS_URL and BACHS_CANCEL_URL.');
     exitCode = 64;
     return;
   }
-  final rawCatalog = jsonDecode(File(Platform.environment['BACHS_CATALOG_FILE'] ??
-          'config/catalog.json').readAsStringSync());
+  final rawCatalog = jsonDecode(
+      File(Platform.environment['BACHS_CATALOG_FILE'] ?? 'config/catalog.json')
+          .readAsStringSync());
   if (rawCatalog is! Map<String, dynamic>) {
     throw const FormatException('Catalog should contain SKU -> pricing');
   }
@@ -38,7 +44,8 @@ Future<void> main() async {
   for (final entry in rawCatalog.entries) {
     final value = entry.value;
     if (value is! Map<String, dynamic> ||
-        value['currency'] is! String || value['amount'] is! String) {
+        value['currency'] is! String ||
+        value['amount'] is! String) {
       throw const FormatException('Invalid catalog entry');
     }
     catalog[entry.key] = BachsPricing(
@@ -52,14 +59,16 @@ Future<void> main() async {
   final eventIds = <String>{};
   stdout.writeln('Local merchant backend: http://127.0.0.1:8080');
   stdout.writeln('SKU catalog: ${catalog.keys.join(', ')}');
-  stdout.writeln('DEVELOPMENT ONLY: no user auth, database or durable deduplication.');
+  stdout.writeln(
+      'DEVELOPMENT ONLY: no user auth, database or durable deduplication.');
   await for (final req in server) {
     try {
       if (req.method == 'POST' && req.uri.path == '/checkout') {
         final raw = jsonDecode(await utf8.decoder.bind(req).join());
         if (raw is! Map<String, dynamic> ||
             raw['order_id'] is! String ||
-            !RegExp(r'^[a-zA-Z0-9_-]{1,64}$').hasMatch(raw['order_id'] as String) ||
+            !RegExp(r'^[a-zA-Z0-9_-]{1,64}$')
+                .hasMatch(raw['order_id'] as String) ||
             raw['context'] is! Map<String, dynamic> ||
             (raw['context'] as Map<String, dynamic>)['sku'] is! String) {
           await _reply(req, 400, {'code': 'INVALID_ORDER'});
@@ -95,7 +104,8 @@ Future<void> main() async {
         final orderId = req.uri.queryParameters['order_id'];
         final checkoutId = req.uri.queryParameters['checkout_id'];
         final order = orders[orderId];
-        if (order == null || order.checkout == null ||
+        if (order == null ||
+            order.checkout == null ||
             order.checkout!.id != checkoutId) {
           await _reply(req, 404, {'code': 'ORDER_NOT_FOUND'});
           continue;
@@ -110,14 +120,16 @@ Future<void> main() async {
           await _reply(req, 503, {'code': 'WEBHOOK_NOT_CONFIGURED'});
           continue;
         }
-        final bytes = await req.fold<List<int>>(<int>[],
-            (acc, chunk) => acc..addAll(chunk));
+        final bytes = await req
+            .fold<List<int>>(<int>[], (acc, chunk) => acc..addAll(chunk));
         final headers = <String, String>{};
-        req.headers.forEach((k, v) { if (v.isNotEmpty) headers[k] = v.first; });
+        req.headers.forEach((k, v) {
+          if (v.isNotEmpty) headers[k] = v.first;
+        });
         BachsWebhookEvent event;
         try {
           event = BachsWebhooks.constructEvent(
-            rawBody: bytes, headers: headers, secret: webhookSecret);
+              rawBody: bytes, headers: headers, secret: webhookSecret);
         } on BachsWebhookException {
           await _reply(req, 400, {'code': 'INVALID_SIGNATURE'});
           continue;
@@ -129,7 +141,10 @@ Future<void> main() async {
         final checkoutId = event.data['checkout_id'];
         _Order? matching;
         for (final order in orders.values) {
-          if (order.checkout?.id == checkoutId) { matching = order; break; }
+          if (order.checkout?.id == checkoutId) {
+            matching = order;
+            break;
+          }
         }
         if (matching != null && matching.status != 'paid') {
           if (event.type == 'collection.succeeded' &&
@@ -166,10 +181,13 @@ bool _sameAmount(Object? amount, String expected) {
     final parts = input.split('.');
     return '${BigInt.parse(parts[0])}.${parts.length > 1 ? parts[1].padRight(2, '0') : '00'}';
   }
-  return normalized(amount) != null && normalized(amount) == normalized(expected);
+
+  return normalized(amount) != null &&
+      normalized(amount) == normalized(expected);
 }
 
-Future<void> _reply(HttpRequest req, int status, Map<String, dynamic> payload) async {
+Future<void> _reply(
+    HttpRequest req, int status, Map<String, dynamic> payload) async {
   req.response
     ..statusCode = status
     ..headers.contentType = ContentType.json

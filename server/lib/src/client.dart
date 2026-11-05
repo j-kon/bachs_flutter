@@ -8,8 +8,8 @@ import 'checkout_models.dart';
 enum BachsEnvironment { sandbox, production }
 
 class BachsApiException implements Exception {
-  const BachsApiException({required this.statusCode, this.code, this.detail,
-    this.retryAfter});
+  const BachsApiException(
+      {required this.statusCode, this.code, this.detail, this.retryAfter});
   final int statusCode;
   final String? code;
   final String? detail;
@@ -36,9 +36,10 @@ class BachsClient {
         _baseUrl = Uri.parse(environment == BachsEnvironment.sandbox
             ? 'https://sandbox-api.bachs.io'
             : 'https://api.bachs.io') {
-    final expectedPrefix = environment == BachsEnvironment.sandbox
-        ? 'sk_sandbox_' : 'sk_live_';
-    if (!apiKey.startsWith(expectedPrefix) || apiKey.length <= expectedPrefix.length) {
+    final expectedPrefix =
+        environment == BachsEnvironment.sandbox ? 'sk_sandbox_' : 'sk_live_';
+    if (!apiKey.startsWith(expectedPrefix) ||
+        apiKey.length <= expectedPrefix.length) {
       throw ArgumentError('API key does not match the configured environment');
     }
   }
@@ -64,26 +65,32 @@ class BachsClient {
   }
 
   Future<RetrievedCheckout> retrieveCheckout(String checkoutId) async =>
-      RetrievedCheckout.fromJson(await _request(
-          'GET', '/v1/checkout-sessions/${Uri.encodeComponent(_safeId(checkoutId))}'));
+      RetrievedCheckout.fromJson(await _request('GET',
+          '/v1/checkout-sessions/${Uri.encodeComponent(_safeId(checkoutId))}'));
 
   /// Convenience endpoints. These return full provider JSON because fields
   /// evolve across Bachs releases. Use only from trusted server code.
-  Future<Map<String, dynamic>> listProducts({int? limit}) => _request(
-      'GET', '/v1/products', query: {if (limit != null) 'limit': '$limit'});
+  Future<Map<String, dynamic>> listProducts({int? limit}) =>
+      _request('GET', '/v1/products',
+          query: {if (limit != null) 'limit': '$limit'});
 
-  Future<Map<String, dynamic>> retrieveProduct(String productId) =>
-      _request('GET', '/v1/products/${Uri.encodeComponent(_safeId(productId))}');
+  Future<Map<String, dynamic>> retrieveProduct(String productId) => _request(
+      'GET', '/v1/products/${Uri.encodeComponent(_safeId(productId))}');
 
-  Future<Map<String, dynamic>> listPayments({int? limit}) => _request(
-      'GET', '/v1/payments', query: {if (limit != null) 'limit': '$limit'});
+  Future<Map<String, dynamic>> listPayments({int? limit}) =>
+      _request('GET', '/v1/payments',
+          query: {if (limit != null) 'limit': '$limit'});
 
-  Future<Map<String, dynamic>> retrievePayment(String paymentId) =>
-      _request('GET', '/v1/payments/${Uri.encodeComponent(_safeId(paymentId))}');
+  Future<Map<String, dynamic>> retrievePayment(String paymentId) => _request(
+      'GET', '/v1/payments/${Uri.encodeComponent(_safeId(paymentId))}');
 
   static String _safeId(String value) {
-    if (value.isEmpty || value == '.' || value == '..' ||
-        value.contains('/') || value.contains('?') || value.contains('#')) {
+    if (value.isEmpty ||
+        value == '.' ||
+        value == '..' ||
+        value.contains('/') ||
+        value.contains('?') ||
+        value.contains('#')) {
       throw ArgumentError('Invalid resource identifier');
     }
     return value;
@@ -100,7 +107,8 @@ class BachsClient {
       throw ArgumentError('Idempotency keys are only valid for POST/PATCH');
     }
     if (idempotencyKey != null &&
-        (idempotencyKey.isEmpty || idempotencyKey.contains('\n') ||
+        (idempotencyKey.isEmpty ||
+            idempotencyKey.contains('\n') ||
             idempotencyKey.contains('\r'))) {
       throw ArgumentError('Invalid idempotency key');
     }
@@ -117,37 +125,51 @@ class BachsClient {
     });
     if (body != null) req.body = jsonEncode(body);
     http.StreamedResponse streamed;
+    String content;
     try {
       streamed = await _httpClient.send(req).timeout(timeout);
+      content = await streamed.stream.bytesToString().timeout(timeout);
     } on TimeoutException {
       // Outcome of POST could be uncertain: caller must reconcile and reuse key.
-      throw const BachsApiException(statusCode: 0, code: 'TIMEOUT',
+      throw const BachsApiException(
+          statusCode: 0,
+          code: 'TIMEOUT',
           detail: 'Request timed out; operation outcome may be unknown');
     } on http.ClientException {
-      throw const BachsApiException(statusCode: 0, code: 'NETWORK_ERROR',
+      throw const BachsApiException(
+          statusCode: 0,
+          code: 'NETWORK_ERROR',
           detail: 'Network failure; operation outcome may be unknown');
     }
-    final content = await streamed.stream.bytesToString().timeout(timeout);
     dynamic decoded;
     try {
       decoded = content.isEmpty ? <String, dynamic>{} : jsonDecode(content);
     } on FormatException {
-      throw BachsApiException(statusCode: streamed.statusCode,
-          code: 'INVALID_RESPONSE', detail: 'Non-JSON response from Bachs');
+      throw BachsApiException(
+          statusCode: streamed.statusCode,
+          code: 'INVALID_RESPONSE',
+          detail: 'Non-JSON response from Bachs');
     }
     if (streamed.statusCode < 200 || streamed.statusCode >= 300) {
-      final error = decoded is Map<String, dynamic> ? decoded : <String, dynamic>{};
+      final error =
+          decoded is Map<String, dynamic> ? decoded : <String, dynamic>{};
       final retryAfter = int.tryParse(streamed.headers['retry-after'] ?? '');
       throw BachsApiException(
         statusCode: streamed.statusCode,
-        code: error['error_code'] is String ? error['error_code'] as String : null,
-        detail: error['detail'] is String ? error['detail'] as String : 'Bachs request failed',
+        code: error['error_code'] is String
+            ? error['error_code'] as String
+            : null,
+        detail: error['detail'] is String
+            ? error['detail'] as String
+            : 'Bachs request failed',
         retryAfter: retryAfter == null ? null : Duration(seconds: retryAfter),
       );
     }
     if (decoded is! Map<String, dynamic>) {
-      throw BachsApiException(statusCode: streamed.statusCode,
-          code: 'INVALID_RESPONSE', detail: 'Expected a JSON object');
+      throw BachsApiException(
+          statusCode: streamed.statusCode,
+          code: 'INVALID_RESPONSE',
+          detail: 'Expected a JSON object');
     }
     return decoded;
   }

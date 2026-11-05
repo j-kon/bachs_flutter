@@ -1,11 +1,12 @@
 import 'package:url_launcher/url_launcher.dart';
 
 import 'checkout_session.dart';
+import 'models.dart';
+import 'mobile_security.dart';
 
 /// Thrown when a checkout URL is unsafe or the platform cannot launch it.
-class BachsCheckoutException implements Exception {
-  const BachsCheckoutException(this.message);
-  final String message;
+class BachsCheckoutException extends BachsSdkException {
+  const BachsCheckoutException(super.message) : super(code: 'CHECKOUT_LAUNCH');
   @override
   String toString() => 'BachsCheckoutException: $message';
 }
@@ -23,7 +24,8 @@ class BachsCheckout {
     CheckoutUrlLauncher? launcher,
     Set<String> allowedHosts = const <String>{},
   })  : _launcher = launcher ?? _launchExternally,
-        _allowedHosts = Set.unmodifiable(allowedHosts.map((h) => h.toLowerCase()));
+        _allowedHosts =
+            Set.unmodifiable(allowedHosts.map((h) => h.toLowerCase()));
 
   final CheckoutUrlLauncher _launcher;
   final Set<String> _allowedHosts;
@@ -34,17 +36,28 @@ class BachsCheckout {
   /// True for Bachs' checkout host, or an explicitly permitted custom host.
   /// Custom domains must be HTTPS, and are an opt-in for integrators.
   bool isAllowedCheckoutUrl(Uri url) {
-    if (url.scheme != 'https' || url.userInfo.isNotEmpty || url.host.isEmpty) {
+    if (url.scheme != 'https' ||
+        url.userInfo.isNotEmpty ||
+        url.host.isEmpty ||
+        url.port != 443) {
       return false;
     }
     final host = url.host.toLowerCase();
-    return host == 'checkout.bachs.io' || _allowedHosts.contains(host);
+    try {
+      rejectMobileSecrets(url.toString());
+    } on ArgumentError {
+      return false;
+    }
+    return host == 'checkout.bachs.io' ||
+        host == 'sandbox-checkout.bachs.io' ||
+        _allowedHosts.contains(host);
   }
 
   /// Launches a server-created session. Do not infer a payment result here.
   Future<void> launch(BachsCheckoutSession session) async {
     if (!isAllowedCheckoutUrl(session.checkoutUrl)) {
-      throw const BachsCheckoutException('Checkout URL is not a trusted HTTPS host');
+      throw const BachsCheckoutException(
+          'Checkout URL is not a trusted HTTPS host');
     }
     if (session.expiresAt != null &&
         !session.expiresAt!.isAfter(DateTime.now())) {

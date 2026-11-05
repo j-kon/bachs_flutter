@@ -1,286 +1,189 @@
-# Bachs Flutter SDK (community)
+# Bachs Flutter SDK
 
-[![Status: Community](https://img.shields.io/badge/status-community--preview-lightgrey)](https://docs.bachs.io/sdks/overview)
+[![CI](https://github.com/j-kon/bachs_flutter/actions/workflows/ci.yml/badge.svg)](https://github.com/j-kon/bachs_flutter/actions/workflows/ci.yml)
 
-**Reusable Flutter integration for Bachs hosted checkout.** Merchant-independent, configurable, typed, testable, and designed to keep payment secrets off user devices.
+## 1. What is Bachs Flutter SDK?
 
-> **Unofficial community project**. Not an official Bachs SDK. v0.2.0 is a developer preview. The v0.1.0 demo checkout worked in the author's iOS simulator, but v0.2.0 has not yet been compiled or sandbox-tested in this environment. Do not use this as a production payment implementation without reviewing, running tests, and completing sandbox + webhook verification.
+An **unofficial community SDK** for opening Bachs hosted checkout from Flutter and checking payment status through your merchant backend. Bachs collects payment details; your Flutter app never needs a Bachs secret key.
 
-## Why this exists
+Not published on pub.dev. This project is under engineering review, not certified production-ready.
 
-Version 0.1 was essentially one merchant's checkout demo. Version 0.2 is designed for **any** Flutter developer:
+## 2. Features
 
-- A merchant can configure their **own** backend URL and app authentication, without modifying the package.
-- They can select a different product, order ID, quantity, or reference through their own business/backend logic.
-- They can implement their existing backend via injected functions **or** adopt a documented HTTP adapter.
-- The Dart backend companion lets merchants configure their own Bachs **sandbox/live API key**, product cart or server-generated price, payment methods, redirects and webhook signing secret.
-- The Flutter SDK launches a validated Bachs hosted checkout URL and allows an **authenticated merchant-backend** payment-status check, rather than trusting a browser redirect.
-- Flutter unit tests, server unit tests, a multi-product example, and a reference server are included.
+- Open an existing hosted checkout URL with no custom backend.
+- Create dynamic checkout with one endpoint configuration.
+- Typed requests, sessions, errors and verified payment states.
+- Sandbox and production checkout hosts with HTTPS validation.
+- Loading button, status callbacks and verification on app resume.
+- Return-link matching without treating redirects as payment confirmation.
+- Optional merchant-owned Cloudflare Worker and Dart server library.
+- Existing v0.2 provider-based integrations remain supported.
 
-**Never put Bachs `sk_sandbox_...`, `sk_live_...` or `whsec_...` values in Flutter, assets, `--dart-define`, mobile secure storage, or a source repository.** Those values belong on an authenticated backend. Bachs requires this [officially](https://docs.bachs.io/sdks/overview).
-
-## Packages
-
-| Folder | What it does |
-|---|---|
-| `/` | `bachs_flutter`: merchant-independent Flutter client |
-| `/server` | `bachs_server`: optional server-only Dart client + signed webhook verifier |
-| `/example` | Flutter app demonstrating three merchant products and payment-status checks |
-| `/server/bin/example_merchant_backend.dart` | **Local-only reference backend**, configured with environment variables and a catalog JSON file |
-| `/docs` | backend protocol, architecture, security, presentation, release checklist |
-
-## 1. Install in any Flutter application
-
-While unpublished, use the **local path**:
-
-```yaml
-dependencies:
-  bachs_flutter:
-    path: ../bachs_flutter_sdk_v0.2.0
-```
-
-Later, once your own GitHub repository is published and reviewed:
+## 3. Installation
 
 ```yaml
 dependencies:
   bachs_flutter:
     git:
-      url: https://github.com/YOUR_ACCOUNT/YOUR_REPOSITORY.git
-      ref: v0.2.0
+      url: https://github.com/j-kon/bachs_flutter.git
+      ref: main
 ```
 
-No official pub.dev release is claimed. `publish_to: none` remains set until ownership, naming, README, licensing and CI are reviewed.
-
-## 2. Option A: Use your existing authenticated backend (recommended)
-
-There is **no required backend framework**. Use Firebase Functions, Laravel, NestJS, Django, .NET, Go, or anything else.
+Run `flutter pub get`, then import:
 
 ```dart
 import 'package:bachs_flutter/bachs_flutter.dart';
-
-final bachs = BachsFlutter(
-  createSession: (request) async {
-    // Call your OWN authenticated backend here.
-    // Parse its safe checkout response with BachsCheckoutSession.fromJson(...)
-    return BachsCheckoutSession.fromJson(await myApi.createBachsCheckout(
-      request.toJson(),
-    ));
-  },
-  verifyStatus: (orderId, checkoutId) async {
-    // Your server checks its authenticated and verified order status.
-    return BachsPaymentStatus.fromJson(await myApi.checkOrder(
-      orderId: orderId, checkoutId: checkoutId,
-    ));
-  },
-);
-
-final session = await bachs.startCheckout(BachsCheckoutRequest(
-  orderId: 'merchant-order-314',
-  context: {'sku': 'annual-plan'},
-));
-// session.id holds the ID; checkout browser launched. No payment verified yet!
-
-final status = await bachs.checkPayment(
-  orderId: 'merchant-order-314', checkoutId: session.id,
-);
-if (status.isPaid) {
-  // Display your backend-confirmed paid state. Backend does fulfillment.
-}
 ```
 
-**Pricing rule:** `context` is untrusted mobile input. Do NOT directly use it as the charge amount. Read the SKU/order/cart from a server-owned product database and validate ownership, price and currency before calling Bachs.
+Use `main` while reviewing. No verified release tag is recommended yet; pin a reviewed commit for reproducible builds. The SDK requires Dart >=3.3 and Flutter >=3.19; CI validates the versions documented in [validation](docs/VALIDATION.md). The example's app-links plugin has a newer SDK requirement.
 
-## 3. Option B: Use the included HTTP backend adapter
+## 4. Quick Start
 
-The adapter requires your **merchant backend URL**, not the Bachs API URL, and optionally a *user session token* (not a Bachs secret).
+Already have a checkout URL? Use [Opening Hosted Checkout](#5-opening-hosted-checkout).
+
+For dynamic payments, configure your merchant endpoint once:
 
 ```dart
-final backend = BachsBackendAdapter(
-  baseUrl: Uri.parse('https://api.YOUR-COMPANY.com'),
-  createPath: '/payments/bachs/checkout',
-  statusPath: '/payments/bachs/status',
-  tokenProvider: () async => auth.currentAccessToken,
-);
-
 final bachs = BachsFlutter(
-  createSession: backend.createSession,
-  verifyStatus: backend.checkStatus,
+  config: BachsConfig(
+    checkoutEndpoint: 'https://api.myapp.com/payments/checkout',
+    // Use your signed-in user's short-lived token, never a Bachs key.
+    tokenProvider: () async => userAccessToken,
+  ),
 );
 
-final checkout = await bachs.startCheckout(BachsCheckoutRequest(
-  orderId: 'order_492', context: {'sku': 'team'},
-));
-
-// Later, for example when app resumes:
-final status = await bachs.checkPayment(
-  orderId: 'order_492', checkoutId: checkout.id,
+final result = await bachs.pay(
+  BachsPaymentRequest(orderId: 'order_123', productId: 'book', quantity: 1),
 );
-
-// Close the adapter when no longer needed:
-backend.close();
 ```
 
-**Contract:** see [docs/BACKEND_CONTRACT.md](docs/BACKEND_CONTRACT.md). The default adapter expects:
+`userAccessToken` comes from your app's login provider. The endpoint must implement the contract below or use the optional starter. Product IDs and quantity are untrusted suggestions; prices belong on the server.
 
-- `POST /checkout` with `{"order_id":"...","context":{"sku":"..."}}` and returns Bachs public checkout session JSON.
-- `GET /checkout-status?order_id=...&checkout_id=...` and returns `{"order_id":"...","checkout_id":"...","status":"pending|paid|failed|cancelled|expired"}`.
+**`pay()` returns after checkout launch and a status request; it does not wait for the customer to finish.** The result normally has pending status. Keep it to check again on return. If the status service is unavailable, the session remains available and `result.verificationError` explains why it is unverified.
 
-Both paths are configurable, and **existing APIs can bypass the adapter** using the functions in Option A.
+Call `bachs.close()` when its owning screen/service is disposed.
 
-### Optional ready-made Flutter button
+## 5. Opening Hosted Checkout
+
+```dart
+final bachs = BachsFlutter.hosted();
+await bachs.openCheckoutUrl(
+  Uri.parse('https://sandbox-checkout.bachs.io/c/YOUR_EXISTING_SESSION'),
+);
+bachs.close();
+```
+
+Supply a real, unexpired URL obtained from your merchant's existing checkout flow. This opens the browser only. It does not create a session, detect browser closure, verify a payment or fulfill an order. No Bachs credentials are needed in Flutter.
+
+Allowed hosts include `checkout.bachs.io` and `sandbox-checkout.bachs.io`. Custom domains require an explicit `BachsCheckout(allowedHosts: {...})` override. HTTP, embedded credentials and nonstandard ports are rejected.
+
+## 6. Dynamic Checkout Setup
+
+`BachsConfig` needs `checkoutEndpoint`. By default the status URL is that endpoint followed by `-status`; set `statusEndpoint` explicitly if yours differs. Both must be on the same HTTPS origin to protect user tokens.
+
+Your server exposes:
+
+| Request | Response |
+| --- | --- |
+| `POST /payments/checkout` with `order_id` and optional `context` | `checkout_id`, `checkout_url`, `status: "open"`, optional `expires_at` |
+| `GET /payments/checkout-status?order_id=...&checkout_id=...` | `order_id`, `checkout_id`, `status` |
+
+Status values are `pending`, `paid`, `failed`, `cancelled`, or `expired`. The server authenticates the user, checks order ownership, sets prices, stores an idempotency key, and verifies signed Bachs webhooks. It must never return secrets to Flutter.
+
+The [backend contract](docs/BACKEND_CONTRACT.md) has payloads and the [optional starter](docs/SERVERLESS.md) implements these routes without writing Bachs REST calls yourself. Existing backends can continue using `BachsFlutter(createSession: ..., verifyStatus: ...)` and `BachsBackendAdapter`.
+
+## 7. Checkout Callbacks and Payment Verification
+
+Use the ready-made button inside your screen:
 
 ```dart
 BachsCheckoutButton(
   bachs: bachs,
-  request: BachsCheckoutRequest(
-    orderId: 'order_492', context: {'sku': 'team'},
-  ),
-  onCheckoutLaunched: (session) {
-    // Save expected session.id; payment is still pending.
+  request: BachsPaymentRequest(orderId: 'order_123', productId: 'book'),
+  label: 'Buy book',
+  onPaymentResult: (result) {
+    if (result.isPaid) {
+      // Display confirmation. Your backend owns order fulfillment.
+    }
   },
   onError: (error) {
-    // Show appropriate customer-friendly feedback.
+    // Show a friendly retry message.
   },
 )
 ```
 
-You can also use `bachs.startCheckout()` directly with any custom UI.
+The button disables duplicate taps, shows loading, then rechecks on app resume. A subsequent tap checks the same session instead of creating another. Use a new order ID (or widget key) for a new purchase. Customize `style`, `child`, `label` and `enabled`. Legacy `onCheckoutLaunched` remains launch-only.
 
-## 4. Set up your own Dart backend (optional)
-
-Backend `pubspec.yaml`:
-
-```yaml
-dependencies:
-  bachs_server:
-    path: ../bachs_flutter_sdk_v0.2.0/server
-```
-
-Server Dart code:
+With your own UI:
 
 ```dart
-import 'dart:io';
-import 'package:bachs_server/bachs_server.dart';
-
-final api = BachsClient(
-  apiKey: Platform.environment['BACHS_API_KEY']!,
-  environment: BachsEnvironment.sandbox, // switch explicitly for live
-);
-
-final session = await api.createCheckout(
-  CreateCheckoutRequest(
-    // Product-based: productCart: [BachsLineItem(productId: productId)],
-    // OR server-calculated ad-hoc amount:
-    pricing: const BachsPricing(currency: 'NGN', amount: '1000.00'),
-    reference: 'order_492',
-    metadata: {'order_id': 'order_492'},
-    successUrl: Uri.parse('https://merchant.example/thanks'),
-    cancelUrl: Uri.parse('https://merchant.example/cancel'),
-  ),
-  idempotencyKey: 'checkout-order_492',
-);
-
-// Send ONLY `session.toPublicJson()` to the authenticated Flutter caller.
-// Store authoritative order -> checkout mapping server-side.
-api.close();
-```
-
-All keys are supplied *at runtime* by **each merchant's own deployment**. This is not one shared Bachs account or hardcoded SDK-wide configuration. The Dart server client is **optional**; merchants can use Bachs' official Node/TypeScript SDK instead.
-
-### Webhooks are SERVER-SIDE
-
-```dart
-final event = BachsWebhooks.constructEvent(
-  rawBody: rawRequestBytes,
-  headers: requestHeaders,
-  secret: Platform.environment['BACHS_WEBHOOK_SECRET']!,
-);
-// Verify payment against order's expected amount/currency;
-// atomically deduplicate event.id, persist results, fulfill exactly once.
-```
-
-Never send the signing secret to Flutter. This helper verifies the HMAC over the **raw bytes**, accepting Bachs signature V2 key rotation and the legacy signature format, with timestamp tolerance. See [Bachs webhook docs](https://docs.bachs.io/guides/webhooks/overview).
-
-## 5. Return-to-app navigation
-
-The app registers Universal Links (iOS) and Android App Links (or a compatible deep-link listener), and forwards incoming URLs to this SDK:
-
-```dart
-final bachs = BachsFlutter(
-  createSession: backend.createSession,
-  verifyStatus: backend.checkStatus,
-  returnUrlMatcher: BachsReturnUrlMatcher(
-    successUrl: Uri.parse('https://merchant.example/thanks'),
-    cancelUrl: Uri.parse('https://merchant.example/cancel'),
-  ),
-);
-final redirect = bachs.handleReturn(incomingUri);
-if (redirect.kind == BachsReturnKind.successRedirect) {
-  // UI may show 'Checking payment…'. Do NOT show 'Paid' yet.
-  final status = await bachs.checkPayment(
-    orderId: expectedOrderId,
-    checkoutId: expectedCheckoutId,
-  );
+final latest = await bachs.verifyPayment(result);
+if (latest.isPaid) {
+  // Verified by your configured backend.
 }
 ```
 
-Bachs requires public HTTP(S) `success_url` / `cancel_url` values, not localhost. A successful redirect alone is never evidence of a paid transaction.
+Configure `returnUrlMatcher` and pass incoming app links to `verifyReturn(uri, result)` to verify a return to the active checkout. A cancellation redirect is a navigation hint; a late payment can still be paid. Browser dismissal alone cannot establish cancellation. See [return-to-app setup](docs/RETURN_TO_APP.md) for Android App Links and iOS Universal Links. The example includes `app_links` wiring and lifecycle checks.
 
-## 6. Run the example on your Mac
+Session creation/launch failures throw `BachsSdkException` (`BachsCheckoutException` for browser launch). Network errors use codes such as `TIMEOUT`, `NETWORK` and `INVALID_RESPONSE`. An uncertain creation timeout must be retried with the same order ID and durable backend idempotency, not a new order.
 
-```bash
-# project root
-flutter pub get
-(cd server && dart pub get)
+## 8. Sandbox Testing
 
-# configure your OWN local merchant backend
-cp server/.env.example server/.env
-cp server/config/catalog.example.json server/config/catalog.json
-# edit the environment file with sandbox credentials and your own public redirect URLs
+Start with a sandbox key **on your server only**, sandbox products and a sandbox webhook endpoint. The SDK accepts sandbox checkout URLs automatically. No live transactions are part of this project's automated tests.
 
-# Terminal A (root directory)
-cd server
-set -a; source .env; set +a
-dart run bin/example_merchant_backend.dart
+Run the [shopping example](example/README.md) for product selection and simulated pending, paid, cancelled, expired and failed states. Simulated results are clearly labeled and never charge money. Switch to sandbox mode to use your real deployed backend and sign-in token.
 
-# Terminal B (root directory)
-cd example
-flutter create --platforms=ios,android . # only if ios/android runners are missing
-flutter pub get
-flutter run --dart-define=BACHS_MERCHANT_BACKEND=http://127.0.0.1:8080
+For local backend development only, explicitly set `allowInsecureLoopback: true`. Remote HTTP endpoints remain prohibited. Real sandbox checkout and native return links require merchant credentials, deployed HTTPS pages and device testing; unit tests do not prove those flows.
+
+## 9. Optional Backend Setup
+
+Bachs' [authentication documentation](https://docs.bachs.io/authentication) requires server secret keys. As reviewed on 2026-11-05, we found no documented client-safe publishable key or mobile checkout-creation token. The [official checkout guide](https://docs.bachs.io/guides/checkout/checkout-sessions) requires server-side creation and webhook confirmation.
+
+Choose either:
+
+- **Cloudflare Worker + D1:** [deployment guide](docs/SERVERLESS.md). Configure your own Bachs sandbox credentials, a fixed catalog, return URLs and JWT issuer/JWKS/audience; deploy to your own account. Includes ownership checks, durable idempotency and signed webhook processing. Authentication setup remains required.
+- **Dart backend:** use `server/` as a library in your existing authenticated service. [Dart guide](docs/DART_BACKEND.md). Its localhost reference executable is a sandbox demonstration, not a production server.
+
+There is no shared service holding other merchants' secrets. The starter is optional and does not remove the need for authentication, durable payment state or server-side fulfillment.
+
+## 10. Complete Example
+
+The [example shopping app](example/) installs this SDK through Git and demonstrates the public API, product selection, pending verification, return links and friendly errors. See its README for running simulated and real sandbox modes.
+
+A complete reusable integration function:
+
+```dart
+import 'package:bachs_flutter/bachs_flutter.dart';
+
+Future<BachsPaymentResult> openOrderCheckout({
+  required String orderId,
+  required String userAccessToken,
+}) async {
+  final bachs = BachsFlutter(
+    config: BachsConfig(
+      checkoutEndpoint: 'https://api.myapp.com/payments/checkout',
+      tokenProvider: () async => userAccessToken,
+    ),
+  );
+  try {
+    return await bachs.pay(BachsPaymentRequest(orderId: orderId));
+  } finally {
+    bachs.close();
+  }
+}
 ```
 
-For the Android emulator use `http://10.0.2.2:8080`; opt-in HTTP loopback is supported **only** for simulator development. Production backends must be HTTPS. iOS Simulator may need a local networking ATS exception as described in [example/README.md](example/README.md).
+This returns the launched session and its current status. For a screen that verifies later, retain one SDK instance and the result until that screen is disposed, as the shopping example does.
 
-Check with curl, using a new unique order ID:
+## 11. Security
 
-```bash
-curl -i -X POST http://127.0.0.1:8080/checkout \
-  -H 'Content-Type: application/json' \
-  -d '{"order_id":"order_demo_2026","context":{"sku":"starter"}}'
-```
+- Never place `sk_sandbox_`, `sk_live_`, or webhook signing secrets in Flutter code, assets, defines or storage. The SDK rejects recognized Bachs secret prefixes in configuration, tokens and request data as defense in depth.
+- Never fulfill from launch callbacks, redirects or mobile state. Verify signatures and trusted order state on the server.
+- Validate prices, currency, quantity and authenticated order ownership server-side. Persist idempotency and event deduplication.
+- Review [security policy](SECURITY.md), [validation and audit scope](docs/VALIDATION.md), and [release checklist](docs/RELEASE_CHECKLIST.md) before deployment.
 
-Expected: HTTP 201 with `checkout_id`, `checkout_url`, `status`. For test payments, Bachs CLI can forward signed webhooks to the local endpoint, then the example's **Check verified payment status** button shows the verified result.
+Automated scans and tests are evidence of specific checks, not a security certification or production-readiness guarantee.
 
-**Reference backend warning:** It binds only to `127.0.0.1` and uses an in-memory order store with NO authentication, durable event deduplication, anti-replay business logic, or database persistence. It is a reference for the SDK contract, not a production payments backend.
+## 12. License and Contributions
 
-## Test & quality gates
-
-```bash
-flutter pub get
-flutter analyze
-flutter test
-(cd server && dart pub get && dart analyze && dart test)
-```
-
-A successful simulator checkout on v0.1.0 is evidence only for the old demo. Re-run these checks against v0.2.0 locally. See [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md).
-
-## Resources
-
-- [Migration from v0.1](docs/MIGRATING_FROM_V0_1.md)
-- [Official Bachs checkout guide](https://docs.bachs.io/guides/checkout/checkout-sessions)
-- [Official API keys](https://docs.bachs.io/developer-portal/api-keys)
-- [Official webhooks](https://docs.bachs.io/guides/webhooks/overview)
-- [Official SDK overview](https://docs.bachs.io/sdks/overview)
-
-License: MIT. Contributions welcome, see `CONTRIBUTING.md`.
+MIT — see [LICENSE](LICENSE). Contributions are welcome through [j-kon/bachs_flutter](https://github.com/j-kon/bachs_flutter); read [CONTRIBUTING.md](CONTRIBUTING.md). This SDK is not an official Bachs product and does not imply Bachs endorsement.

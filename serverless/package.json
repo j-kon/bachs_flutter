@@ -1,0 +1,28 @@
+{
+  "name": "bachs-serverless-companion",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "check": "tsc --noEmit",
+    "test": "node --test test/*.test.mjs",
+    "db:local": "wrangler d1 migrations apply bachs-checkout --local",
+    "db:remote": "wrangler d1 migrations apply bachs-checkout --remote",
+    "build": "wrangler deploy --dry-run --outdir dist",
+    "format:check": "prettier --check src test package.json tsconfig.json"
+  },
+  "dependencies": {
+    "jose": "^6.1.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261103.1",
+    "prettier": "^3.9.10",
+    "typescript": "^5.9.0",
+    "wrangler": "^4.0.0"
+  }
+}

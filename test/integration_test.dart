@@ -12,14 +12,21 @@ void main() {
     'status': 'open',
   });
 
-  test('two merchants use independent providers and different orders', () async {
+  test('two merchants use independent providers and different orders',
+      () async {
     final orders = <String>[];
     final first = BachsFlutter(
-      createSession: (r) async { orders.add('A:${r.orderId}'); return openSession; },
+      createSession: (r) async {
+        orders.add('A:${r.orderId}');
+        return openSession;
+      },
       checkout: BachsCheckout(launcher: (_) async => true),
     );
     final second = BachsFlutter(
-      createSession: (r) async { orders.add('B:${r.orderId}'); return openSession; },
+      createSession: (r) async {
+        orders.add('B:${r.orderId}');
+        return openSession;
+      },
       checkout: BachsCheckout(launcher: (_) async => true),
     );
     await first.startCheckout(BachsCheckoutRequest(orderId: 'order_a'));
@@ -28,8 +35,12 @@ void main() {
   });
 
   test('developer order context is dynamic, and only order id required', () {
-    final request = BachsCheckoutRequest(orderId: 'abc', context: {'sku': 'pro'});
-    expect(request.toJson(), {'order_id': 'abc', 'context': {'sku': 'pro'}});
+    final request =
+        BachsCheckoutRequest(orderId: 'abc', context: {'sku': 'pro'});
+    expect(request.toJson(), {
+      'order_id': 'abc',
+      'context': {'sku': 'pro'}
+    });
     expect(() => BachsCheckoutRequest(orderId: ''), throwsArgumentError);
   });
 
@@ -37,11 +48,11 @@ void main() {
     final sdk = BachsFlutter(
       createSession: (_) async => openSession,
       returnUrlMatcher: BachsReturnUrlMatcher(
-        successUrl: Uri.parse('https://merchant.example/thanks'),
-        cancelUrl: Uri.parse('https://merchant.example/cancel')),
+          successUrl: Uri.parse('https://merchant.example/thanks'),
+          cancelUrl: Uri.parse('https://merchant.example/cancel')),
     );
-    final result = sdk.handleReturn(Uri.parse(
-        'https://merchant.example/thanks?checkout_id=chk_t'));
+    final result = sdk.handleReturn(
+        Uri.parse('https://merchant.example/thanks?checkout_id=chk_t'));
     expect(result.kind, BachsReturnKind.successRedirect);
     expect(result.checkoutId, 'chk_t');
     await expectLater(sdk.checkPayment(orderId: 'a', checkoutId: 'chk_t'),
@@ -52,21 +63,27 @@ void main() {
     final sdk = BachsFlutter(
       createSession: (_) async => openSession,
       verifyStatus: (_, __) async => const BachsPaymentStatus(
-        orderId: 'another', checkoutId: 'chk_t', state: BachsPaymentState.paid),
+          orderId: 'another',
+          checkoutId: 'chk_t',
+          state: BachsPaymentState.paid),
     );
-    await expectLater(sdk.checkPayment(orderId: 'expected', checkoutId: 'chk_t'),
+    await expectLater(
+        sdk.checkPayment(orderId: 'expected', checkoutId: 'chk_t'),
         throwsA(isA<BachsSdkException>()));
   });
 
-  test('backend adapter injects merchant auth and serializes dynamic context', () async {
+  test('backend adapter injects merchant auth and serializes dynamic context',
+      () async {
     late http.Request captured;
     final client = MockClient((req) async {
       captured = req;
-      return http.Response(jsonEncode({
-        'checkout_id': 'chk_t',
-        'checkout_url': 'https://checkout.bachs.io/c/test',
-        'status': 'open',
-      }), 201);
+      return http.Response(
+          jsonEncode({
+            'checkout_id': 'chk_t',
+            'checkout_url': 'https://checkout.bachs.io/c/test',
+            'status': 'open',
+          }),
+          201);
     });
     final backend = BachsBackendAdapter(
       baseUrl: Uri.parse('https://merchant.example/api'),
@@ -74,7 +91,7 @@ void main() {
       tokenProvider: () async => 'user-session-token',
     );
     final session = await backend.createSession(BachsCheckoutRequest(
-      orderId: 'order_123', context: {'sku': 'starter'}));
+        orderId: 'order_123', context: {'sku': 'starter'}));
     expect(captured.url.toString(), 'https://merchant.example/api/checkout');
     expect(captured.headers['Authorization'], 'Bearer user-session-token');
     expect(jsonDecode(captured.body)['context']['sku'], 'starter');
@@ -82,24 +99,32 @@ void main() {
     backend.close();
   });
 
-  test('backend adapter rejects non-loopback HTTP and does not accept API keys', () {
-    expect(() => BachsBackendAdapter(baseUrl: Uri.parse('http://merchant.example')),
+  test('backend adapter rejects non-loopback HTTP and does not accept API keys',
+      () {
+    expect(
+        () =>
+            BachsBackendAdapter(baseUrl: Uri.parse('http://merchant.example')),
         throwsArgumentError);
-    expect(() => BachsBackendAdapter(
-      baseUrl: Uri.parse('http://127.0.0.1:8080')),
+    expect(
+        () => BachsBackendAdapter(baseUrl: Uri.parse('http://127.0.0.1:8080')),
         throwsArgumentError);
     final backend = BachsBackendAdapter(
-      baseUrl: Uri.parse('http://127.0.0.1:8080'),
-      allowInsecureLoopback: true);
+        baseUrl: Uri.parse('http://127.0.0.1:8080'),
+        allowInsecureLoopback: true);
     backend.close();
   });
 
-  test('backend adapter rejects checkout id mismatch on status query', () async {
+  test('backend adapter rejects checkout id mismatch on status query',
+      () async {
     final backend = BachsBackendAdapter(
       baseUrl: Uri.parse('https://merchant.example'),
-      httpClient: MockClient((_) async => http.Response(jsonEncode({
-        'order_id': 'order_A', 'checkout_id': 'chk_DIFFERENT', 'status': 'paid'
-      }), 200)),
+      httpClient: MockClient((_) async => http.Response(
+          jsonEncode({
+            'order_id': 'order_A',
+            'checkout_id': 'chk_DIFFERENT',
+            'status': 'paid'
+          }),
+          200)),
     );
     await expectLater(backend.checkStatus('order_A', 'chk_EXPECTED'),
         throwsA(isA<BachsSdkException>()));
@@ -108,11 +133,17 @@ void main() {
 
   test('status response parses paid and rejects unknown values', () {
     final paid = BachsPaymentStatus.fromJson({
-      'order_id': 'a', 'checkout_id': 'c', 'status': 'paid',
+      'order_id': 'a',
+      'checkout_id': 'c',
+      'status': 'paid',
     });
     expect(paid.isPaid, isTrue);
-    expect(() => BachsPaymentStatus.fromJson({
-      'order_id': 'a', 'checkout_id': 'c', 'status': 'redirected',
-    }), throwsFormatException);
+    expect(
+        () => BachsPaymentStatus.fromJson({
+              'order_id': 'a',
+              'checkout_id': 'c',
+              'status': 'redirected',
+            }),
+        throwsFormatException);
   });
 }

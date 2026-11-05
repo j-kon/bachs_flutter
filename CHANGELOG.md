@@ -1,3 +1,13 @@
+## 0.3.0
+
+- Add BachsConfig endpoint integration, BachsPaymentRequest and BachsPaymentResult.
+- Add pay, verifyPayment, verifyReturn and existing hosted URL launch.
+- Accept official sandbox checkout host; reject secrets in mobile requests/tokens.
+- Preserve launched sessions on verification outages and verify button state on resume.
+- Add optional authenticated Cloudflare Worker/D1 starter and runnable Git-installed shop.
+- Enforce formatting, analysis, tests, backend compilation and dependency/security CI checks.
+- Preserve v0.2 custom-provider APIs; document return navigation and deployment limits.
+
 # Changelog
 
 ## 0.2.0 (community developer preview)

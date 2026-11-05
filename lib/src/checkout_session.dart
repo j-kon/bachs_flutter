@@ -19,9 +19,12 @@ class BachsCheckoutSession {
     final id = json['checkout_id'];
     final url = json['checkout_url'];
     final status = json['status'];
-    if (id is! String || id.isEmpty ||
-        url is! String || url.isEmpty ||
-        status is! String || status.isEmpty) {
+    if (id is! String ||
+        id.isEmpty ||
+        url is! String ||
+        url.isEmpty ||
+        status is! String ||
+        status.isEmpty) {
       throw const FormatException('Invalid checkout session response');
     }
     final parsedUrl = Uri.tryParse(url);
@@ -29,6 +32,10 @@ class BachsCheckoutSession {
       throw const FormatException('Invalid checkout_url');
     }
     final expires = json['expires_at'];
+    if (expires != null &&
+        (expires is! String || DateTime.tryParse(expires) == null)) {
+      throw const FormatException('Invalid expires_at');
+    }
     return BachsCheckoutSession(
       id: id,
       checkoutUrl: parsedUrl,
@@ -41,6 +48,7 @@ class BachsCheckoutSession {
         'checkout_id': id,
         'checkout_url': checkoutUrl.toString(),
         'status': status,
-        if (expiresAt != null) 'expires_at': expiresAt!.toUtc().toIso8601String(),
+        if (expiresAt != null)
+          'expires_at': expiresAt!.toUtc().toIso8601String(),
       };
 }

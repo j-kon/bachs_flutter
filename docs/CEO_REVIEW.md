@@ -21,6 +21,15 @@
 ## What not to claim
 
 - This is **not** official or approved by Bachs.
-- Unit tests written do not mean Flutter or Dart tests were executed in this environment.
+- Automated verification results and their limits are documented in [VALIDATION.md](VALIDATION.md); device and real sandbox payments still require separate evidence.
 - The local example server is **not** production-ready.
 - A checkout redirect is **not** proof of successful payment.
+
+## v0.3 review entry points
+
+- [Five-minute integration guide](../README.md), endpoint API and hosted-only mode.
+- [Runnable shopping example](../example/README.md), clearly labeled simulation and real sandbox configuration.
+- [Optional Worker](SERVERLESS.md), including durable idempotency and webhook processing.
+- [CI and security validation](VALIDATION.md), including known coverage limits.
+
+Repository: https://github.com/j-kon/bachs_flutter. No official endorsement or production certification is claimed.

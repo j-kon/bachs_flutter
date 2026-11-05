@@ -1,0 +1,21 @@
+name = "bachs-checkout"
+main = "src/index.mjs"
+compatibility_date = "2026-11-05"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "bachs-checkout"
+database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+migrations_dir = "migrations"
+
+[vars]
+BACHS_ENVIRONMENT = "sandbox"
+AUTH_ISSUER = "https://YOUR_AUTH_PROVIDER"
+AUTH_AUDIENCE = "YOUR_API_AUDIENCE"
+AUTH_JWKS_URL = "https://YOUR_AUTH_PROVIDER/.well-known/jwks.json"
+BACHS_ORGANIZATION_ID = "acct_REPLACE_ME"
+SUCCESS_URL = "https://YOUR_APP.example/pay/success"
+CANCEL_URL = "https://YOUR_APP.example/pay/cancel"
+ALLOWED_ORIGINS = "https://YOUR_APP.example"
+# Matches the Flutter shop; these are server-owned local product identifiers.
+CATALOG_JSON = '{"notebook":{"amount":"2500.00","currency":"NGN","max_quantity":5},"mug":{"amount":"4500.00","currency":"NGN","max_quantity":5},"tote":{"amount":"6000.00","currency":"NGN","max_quantity":5}}'

@@ -1,7 +1,9 @@
 name: bachs_flutter
 description: Community Flutter checkout SDK for Bachs with pluggable backend integration.
-version: 0.2.0
-homepage: https://docs.bachs.io/
+version: 0.3.0
+homepage: https://github.com/j-kon/bachs_flutter
+repository: https://github.com/j-kon/bachs_flutter
+issue_tracker: https://github.com/j-kon/bachs_flutter/issues
 publish_to: none # Remove only after reserving the package name and reviewing pub.dev policy.
 environment:
   sdk: '>=3.3.0 <4.0.0'

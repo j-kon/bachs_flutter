@@ -13,7 +13,7 @@ Request:
 ```json
 {
   "order_id": "order_492",
-  "context": { "sku": "team-plan" }
+  "context": { "product_id": "notebook", "quantity": 1 }
 }
 ```
 
@@ -30,7 +30,7 @@ HTTP 201:
 }
 ```
 
-**Do not accept a price from the app as authoritative.** `context.sku` is only a hint, not permission to change prices. This allows dynamic products without having Flutter know a merchant's Bachs API key.
+**Do not accept a price from the app as authoritative.** `context.product_id` is only a hint, not permission to change prices. This allows dynamic products without having Flutter know a merchant's Bachs API key.
 
 ## 2. Retrieve the merchant-confirmed order status
 
@@ -63,3 +63,5 @@ Developers with existing endpoints can skip the HTTP adapter and implement `Bach
 - Make order creation idempotent and event processing idempotent and durable.
 - Reconcile with Bachs on ambiguous writes; reject mismatched amount, currency and checkout ID.
 - No customer PII or Bachs secrets in mobile logs or client-facing errors.
+
+The legacy Dart localhost demo uses `context.sku`; the new Worker uses `product_id` and `quantity`. Keep one order ID per logical purchase. Treat a creation timeout as an uncertain write requiring durable idempotency/reconciliation. A status outage does not require another checkout.

@@ -2,8 +2,8 @@
 
 ## Required before proposing production adoption
 
-- [ ] On macOS, run `dart format .` and `flutter analyze` then `flutter test` at the root.
-- [ ] Under `server/` run `dart format .`, `dart analyze`, and `dart test`.
+- [ ] Run `dart format --output=none --set-exit-if-changed lib test` and `flutter analyze` then `flutter test` at the root.
+- [ ] Under `server/` run `dart format --output=none --set-exit-if-changed lib test bin`, `dart analyze`, and `dart test`.
 - [ ] Run package/example app on iOS Simulator and Android Emulator.
 - [ ] Test with two distinct sandbox accounts to prove config separation and no shared keys.
 - [ ] Exercise raw price and product-cart checkouts in Bachs sandbox.
@@ -20,3 +20,5 @@
 ## Development-only known limitations
 
 The bundled local backend has no authentication, database, persistence, durable deduplication or retry-safe long-term processing. It binds only to loopback. It MUST NOT be deployed as a payment processor.
+
+The separate Worker has authenticated ownership and durable D1 state, but still requires deployment-specific rate limits, monitoring, reconciliation and idempotent fulfillment. Follow [SERVERLESS.md](SERVERLESS.md); passing CI does not complete this production checklist.

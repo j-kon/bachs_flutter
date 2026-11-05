@@ -7,7 +7,8 @@ enum BachsReturnKind { successRedirect, cancellationRedirect, unrelated }
 /// check payment completion with its backend after any return, and the backend
 /// must fulfill orders only after authenticated verification/webhooks.
 class BachsReturnUrlMatcher {
-  const BachsReturnUrlMatcher({required this.successUrl, required this.cancelUrl});
+  const BachsReturnUrlMatcher(
+      {required this.successUrl, required this.cancelUrl});
 
   final Uri successUrl;
   final Uri cancelUrl;
