@@ -46,10 +46,10 @@ packages:
     description:
       path: "."
       ref: main
-      resolved-ref: "98172f26b15f7369feb7728b9dd25d61a199ef5b"
+      resolved-ref: e7e639cdef351ab06629c91241c6b698b9b12c78
       url: "https://github.com/j-kon/bachs_flutter.git"
     source: git
-    version: "0.2.0"
+    version: "0.3.0"
   boolean_selector:
     dependency: transitive
     description:
