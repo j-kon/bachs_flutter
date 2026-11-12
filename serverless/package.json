@@ -17,7 +17,7 @@
     "format:check": "prettier --check src test package.json tsconfig.json"
   },
   "dependencies": {
-    "jose": "^6.1.0"
+    "jose": "^6.2.16"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20261103.1",
